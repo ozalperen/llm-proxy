@@ -1,16 +1,44 @@
 version: "3.9"
 services:
   litellm:
+    container_name: ${LITELLM_CONTAINER_NAME}
     build:
       context: .
       args:
         target: runtime
-    image: ghcr.io/berriai/litellm:main-latest
+    image: ghcr.io/berriai/litellm-database:main-latest
     ports:
-      - "4000:4000" # Map the container port to the host, change the host port if necessary
+      - "${LITELLM_PORT}:4000" # Map the container port to the host, change the host port if necessary
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}
+      - VIRTUAL_HOST=${DOMAIN}
+      - VIRTUAL_PORT=${LITELLM_PORT}
+      - LETSENCRYPT_HOST=litellm.unknownland.org
+      - LETSENCRYPT_EMAIL=alp@cerebrumtechnologies.com
+      - STORE_MODEL_IN_DB='True'
     volumes:
-      - ./litellm-config.yaml:/app/config.yaml # Mount the local configuration file
+      - ./containerMounts/litellm-config.yaml:/app/config.yaml # Mount the local configuration file
     # You can change the port or number of workers as per your requirements or pass any new supported CLI augument. Make sure the port passed here matches with the container port defined above in `ports` value
     command: [ "--config", "/app/config.yaml", "--port", "4000", "--num_workers", "8" ]
 
-# ...rest of your docker-compose config if any
+  litellm-db:
+    image: postgres:14
+    container_name: ${DB_CONTAINER_NAME}
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - ./containerMounts/litellm-db-data:/var/lib/postgresql/data
+  litellm-redis:
+    container_name: ${REDIS_CONTAINER_NAME}
+    image: redis:latest
+    volumes:
+      - ./containerMounts/litellm-redis-data:/data
+    command: redis-server --requirepass "${REDIS_PASSWORD}"
+
+
+networks:
+  default:
+    external:
+      name: ${NETWORK_NAME}
