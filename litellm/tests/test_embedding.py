@@ -1,16 +1,20 @@
-import sys, os
+import os
+import sys
 import traceback
+
+import openai
 import pytest
 from dotenv import load_dotenv
-import openai
 
 load_dotenv()
 
 sys.path.insert(
     0, os.path.abspath("../..")
 )  # Adds the parent directory to the system path
+from unittest.mock import MagicMock, patch
+
 import litellm
-from litellm import embedding, completion, completion_cost
+from litellm import completion, completion_cost, embedding
 
 litellm.set_verbose = False
 
@@ -231,6 +235,7 @@ def test_cohere_embedding():
         response = embedding(
             model="embed-english-v2.0",
             input=["good morning from litellm", "this is another item"],
+            input_type="search_query",
         )
         print(f"response:", response)
 
@@ -274,6 +279,7 @@ def test_bedrock_embedding_titan():
         response = embedding(
             model="bedrock/amazon.titan-embed-text-v1",
             input=f"good morning from litellm, attempting to embed data {current_time}",  # input should always be a string in this test
+            aws_region_name="us-west-2",
         )
         print(f"response:", response)
         assert isinstance(
@@ -484,6 +490,76 @@ def test_mistral_embeddings():
         pytest.fail(f"Error occurred: {e}")
 
 
+def test_watsonx_embeddings():
+
+    def mock_wx_embed_request(method: str, url: str, **kwargs):
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.headers = {"Content-Type": "application/json"}
+        mock_response.json.return_value = {
+            "model_id": "ibm/slate-30m-english-rtrvr",
+            "created_at": "2024-01-01T00:00:00.00Z",
+            "results": [{"embedding": [0.0] * 254}],
+            "input_token_count": 8,
+        }
+        return mock_response
+
+    try:
+        litellm.set_verbose = True
+        with patch("requests.request", side_effect=mock_wx_embed_request):
+            response = litellm.embedding(
+                model="watsonx/ibm/slate-30m-english-rtrvr",
+                input=["good morning from litellm"],
+                token="secret-token",
+            )
+        print(f"response: {response}")
+        assert isinstance(response.usage, litellm.Usage)
+    except litellm.RateLimitError as e:
+        pass
+    except Exception as e:
+        pytest.fail(f"Error occurred: {e}")
+
+
+@pytest.mark.asyncio
+async def test_watsonx_aembeddings():
+
+    def mock_async_client(*args, **kwargs):
+
+        mocked_client = MagicMock()
+
+        async def mock_send(request, *args, stream: bool = False, **kwags):
+            mock_response = MagicMock()
+            mock_response.status_code = 200
+            mock_response.headers = {"Content-Type": "application/json"}
+            mock_response.json.return_value = {
+                "model_id": "ibm/slate-30m-english-rtrvr",
+                "created_at": "2024-01-01T00:00:00.00Z",
+                "results": [{"embedding": [0.0] * 254}],
+                "input_token_count": 8,
+            }
+            mock_response.is_error = False
+            return mock_response
+
+        mocked_client.send = mock_send
+
+        return mocked_client
+
+    try:
+        litellm.set_verbose = True
+        with patch("httpx.AsyncClient", side_effect=mock_async_client):
+            response = await litellm.aembedding(
+                model="watsonx/ibm/slate-30m-english-rtrvr",
+                input=["good morning from litellm"],
+                token="secret-token",
+            )
+        print(f"response: {response}")
+        assert isinstance(response.usage, litellm.Usage)
+    except litellm.RateLimitError as e:
+        pass
+    except Exception as e:
+        pytest.fail(f"Error occurred: {e}")
+
+
 # test_mistral_embeddings()
 
 
@@ -498,6 +574,54 @@ def test_voyage_embeddings():
             input=["good morning from litellm"],
         )
         print(f"response: {response}")
+    except Exception as e:
+        pytest.fail(f"Error occurred: {e}")
+
+
+@pytest.mark.asyncio
+async def test_triton_embeddings():
+    try:
+        litellm.set_verbose = True
+        response = await litellm.aembedding(
+            model="triton/my-triton-model",
+            api_base="https://exampleopenaiendpoint-production.up.railway.app/triton/embeddings",
+            input=["good morning from litellm"],
+        )
+        print(f"response: {response}")
+
+        # stubbed endpoint is setup to return this
+        assert response.data[0]["embedding"] == [0.1, 0.2]
+    except Exception as e:
+        pytest.fail(f"Error occurred: {e}")
+
+
+@pytest.mark.parametrize("sync_mode", [True, False])
+@pytest.mark.asyncio
+async def test_databricks_embeddings(sync_mode):
+    try:
+        litellm.set_verbose = True
+        litellm.drop_params = True
+
+        if sync_mode:
+            response = litellm.embedding(
+                model="databricks/databricks-bge-large-en",
+                input=["good morning from litellm"],
+                instruction="Represent this sentence for searching relevant passages:",
+            )
+        else:
+            response = await litellm.aembedding(
+                model="databricks/databricks-bge-large-en",
+                input=["good morning from litellm"],
+                instruction="Represent this sentence for searching relevant passages:",
+            )
+
+        print(f"response: {response}")
+
+        openai.types.CreateEmbeddingResponse.model_validate(
+            response.model_dump(), strict=True
+        )
+        # stubbed endpoint is setup to return this
+        # assert response.data[0]["embedding"] == [0.1, 0.2, 0.3]
     except Exception as e:
         pytest.fail(f"Error occurred: {e}")
 

@@ -2,12 +2,19 @@ import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
 # Anthropic
-LiteLLM supports
+LiteLLM supports all anthropic models.
 
+- `claude-3.5` (`claude-3-5-sonnet-20240620`)
 - `claude-3` (`claude-3-haiku-20240307`, `claude-3-opus-20240229`, `claude-3-sonnet-20240229`)
 - `claude-2`
 - `claude-2.1`
 - `claude-instant-1.2`
+
+:::info
+
+Anthropic API fails requests when `max_tokens` are not passed. Due to this litellm passes `max_tokens=4096` when no `max_tokens` are passed.
+
+:::
 
 ## API Keys
 
@@ -15,6 +22,7 @@ LiteLLM supports
 import os
 
 os.environ["ANTHROPIC_API_KEY"] = "your-api-key"
+# os.environ["ANTHROPIC_API_BASE"] = "" # [OPTIONAL] or 'ANTHROPIC_BASE_URL'
 ```
 
 ## Usage
@@ -161,16 +169,34 @@ print(response)
 
 ## Supported Models
 
+`Model Name` 👉 Human-friendly name.  
+`Function Call` 👉 How to call the model in LiteLLM.
+
 | Model Name       | Function Call                              |
 |------------------|--------------------------------------------|
+| claude-3-5-sonnet  | `completion('claude-3-5-sonnet-20240620', messages)` | `os.environ['ANTHROPIC_API_KEY']`       |
 | claude-3-haiku  | `completion('claude-3-haiku-20240307', messages)` | `os.environ['ANTHROPIC_API_KEY']`       |
 | claude-3-opus  | `completion('claude-3-opus-20240229', messages)` | `os.environ['ANTHROPIC_API_KEY']`       |
+| claude-3-5-sonnet-20240620  | `completion('claude-3-5-sonnet-20240620', messages)` | `os.environ['ANTHROPIC_API_KEY']`       |
 | claude-3-sonnet  | `completion('claude-3-sonnet-20240229', messages)` | `os.environ['ANTHROPIC_API_KEY']`       |
 | claude-2.1  | `completion('claude-2.1', messages)` | `os.environ['ANTHROPIC_API_KEY']`       |
 | claude-2  | `completion('claude-2', messages)` | `os.environ['ANTHROPIC_API_KEY']`       |
 | claude-instant-1.2  | `completion('claude-instant-1.2', messages)` | `os.environ['ANTHROPIC_API_KEY']`       |
 | claude-instant-1  | `completion('claude-instant-1', messages)` | `os.environ['ANTHROPIC_API_KEY']`       |
 
+## Passing Extra Headers to Anthropic API 
+
+Pass `extra_headers: dict` to `litellm.completion`
+
+```python
+from litellm import completion
+messages = [{"role": "user", "content": "What is Anthropic?"}]
+response = completion(
+    model="claude-3-5-sonnet-20240620", 
+    messages=messages, 
+    extra_headers={"anthropic-beta": "max-tokens-3-5-sonnet-2024-07-15"}
+)
+```
 ## Advanced
 
 ## Usage - Function Calling 
@@ -223,6 +249,106 @@ assert isinstance(
 
 ```
 
+
+### Forcing Anthropic Tool Use
+
+If you want Claude to use a specific tool to answer the user’s question
+
+You can do this by specifying the tool in the `tool_choice` field like so:
+```python
+response = completion(
+    model="anthropic/claude-3-opus-20240229",
+    messages=messages,
+    tools=tools,
+    tool_choice={"type": "tool", "name": "get_weather"},
+)
+```
+
+
+### Parallel Function Calling 
+
+Here's how to pass the result of a function call back to an anthropic model: 
+
+```python
+from litellm import completion
+import os 
+
+os.environ["ANTHROPIC_API_KEY"] = "sk-ant.."
+
+
+litellm.set_verbose = True
+
+### 1ST FUNCTION CALL ###
+tools = [
+    {
+        "type": "function",
+        "function": {
+            "name": "get_current_weather",
+            "description": "Get the current weather in a given location",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "location": {
+                        "type": "string",
+                        "description": "The city and state, e.g. San Francisco, CA",
+                    },
+                    "unit": {"type": "string", "enum": ["celsius", "fahrenheit"]},
+                },
+                "required": ["location"],
+            },
+        },
+    }
+]
+messages = [
+    {
+        "role": "user",
+        "content": "What's the weather like in Boston today in Fahrenheit?",
+    }
+]
+try:
+    # test without max tokens
+    response = completion(
+        model="anthropic/claude-3-opus-20240229",
+        messages=messages,
+        tools=tools,
+        tool_choice="auto",
+    )
+    # Add any assertions, here to check response args
+    print(response)
+    assert isinstance(response.choices[0].message.tool_calls[0].function.name, str)
+    assert isinstance(
+        response.choices[0].message.tool_calls[0].function.arguments, str
+    )
+
+    messages.append(
+        response.choices[0].message.model_dump()
+    )  # Add assistant tool invokes
+    tool_result = (
+        '{"location": "Boston", "temperature": "72", "unit": "fahrenheit"}'
+    )
+    # Add user submitted tool results in the OpenAI format
+    messages.append(
+        {
+            "tool_call_id": response.choices[0].message.tool_calls[0].id,
+            "role": "tool",
+            "name": response.choices[0].message.tool_calls[0].function.name,
+            "content": tool_result,
+        }
+    )
+    ### 2ND FUNCTION CALL ###
+    # In the second response, Claude should deduce answer from tool results
+    second_response = completion(
+        model="anthropic/claude-3-opus-20240229",
+        messages=messages,
+        tools=tools,
+        tool_choice="auto",
+    )
+    print(second_response)
+except Exception as e:
+    print(f"An error occurred - {str(e)}")
+```
+
+s/o @[Shekhar Patnaik](https://www.linkedin.com/in/patnaikshekhar) for requesting this!
 
 ## Usage - Vision 
 

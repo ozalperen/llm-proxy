@@ -85,6 +85,17 @@ print(query_result[:5])
 </Tabs>
 
 ## Input Params for `litellm.embedding()`
+
+
+:::info
+
+Any non-openai params, will be treated as provider-specific params, and sent in the request body as kwargs to the provider.
+
+[**See Reserved Params**](https://github.com/BerriAI/litellm/blob/2f5f85cb52f36448d1f8bbfbd3b8af8167d0c4c8/litellm/main.py#L3130)
+
+[**See Example**](#example)
+:::
+
 ### Required Fields
 
 - `model`: *string* - ID of the model to use. `model='text-embedding-ada-002'`
@@ -320,8 +331,6 @@ from litellm import embedding
 litellm.vertex_project = "hardy-device-38811" # Your Project ID
 litellm.vertex_location = "us-central1"  # proj location
 
-
-os.environ['VOYAGE_API_KEY'] = ""
 response = embedding(
     model="vertex_ai/textembedding-gecko",
     input=["good morning from litellm"],
@@ -339,6 +348,8 @@ All models listed [here](https://github.com/BerriAI/litellm/blob/57f37f743886a02
 | textembedding-gecko-multilingual@001 | `embedding(model="vertex_ai/textembedding-gecko-multilingual@001", input)` | 
 | textembedding-gecko@001 | `embedding(model="vertex_ai/textembedding-gecko@001", input)` | 
 | textembedding-gecko@003 | `embedding(model="vertex_ai/textembedding-gecko@003", input)` | 
+| text-embedding-preview-0409 | `embedding(model="vertex_ai/text-embedding-preview-0409", input)` |
+| text-multilingual-embedding-preview-0409 | `embedding(model="vertex_ai/text-multilingual-embedding-preview-0409", input)` | 
 
 ## Voyage AI Embedding Models
 
@@ -363,3 +374,66 @@ All models listed here https://docs.voyageai.com/embeddings/#models-and-specific
 | voyage-01 | `embedding(model="voyage/voyage-01", input)` | 
 | voyage-lite-01 | `embedding(model="voyage/voyage-lite-01", input)` | 
 | voyage-lite-01-instruct | `embedding(model="voyage/voyage-lite-01-instruct", input)` | 
+
+## Provider-specific Params
+
+
+:::info
+
+Any non-openai params, will be treated as provider-specific params, and sent in the request body as kwargs to the provider.
+
+[**See Reserved Params**](https://github.com/BerriAI/litellm/blob/2f5f85cb52f36448d1f8bbfbd3b8af8167d0c4c8/litellm/main.py#L3130)
+:::
+
+### **Example**
+
+Cohere v3 Models have a required parameter: `input_type`, it can be one of the following four values:
+
+- `input_type="search_document"`: (default) Use this for texts (documents) you want to store in your vector database
+- `input_type="search_query"`: Use this for search queries to find the most relevant documents in your vector database
+- `input_type="classification"`: Use this if you use the embeddings as an input for a classification system
+- `input_type="clustering"`: Use this if you use the embeddings for text clustering
+
+https://txt.cohere.com/introducing-embed-v3/
+
+<Tabs>
+<TabItem value="sdk" label="SDK">
+
+```python
+from litellm import embedding
+os.environ["COHERE_API_KEY"] = "cohere key"
+
+# cohere call
+response = embedding(
+    model="embed-english-v3.0", 
+    input=["good morning from litellm", "this is another item"], 
+    input_type="search_document" # 👈 PROVIDER-SPECIFIC PARAM
+)
+```
+</TabItem>
+<TabItem value="proxy" label="PROXY">
+
+**via config**
+
+```yaml
+model_list:
+  - model_name: "cohere-embed"
+    litellm_params:
+      model: embed-english-v3.0
+      input_type: search_document # 👈 PROVIDER-SPECIFIC PARAM
+```
+
+**via request**
+
+```bash
+curl -X POST 'http://0.0.0.0:4000/v1/embeddings' \
+-H 'Authorization: Bearer sk-54d77cd67b9febbb' \
+-H 'Content-Type: application/json' \
+-d '{
+  "model": "cohere-embed",
+  "input": ["Are you authorized to work in United States of America?"],
+  "input_type": "search_document" # 👈 PROVIDER-SPECIFIC PARAM
+}'
+```
+</TabItem>
+</Tabs>

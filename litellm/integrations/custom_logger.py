@@ -1,20 +1,21 @@
 #### What this does ####
 #    On success, logs events to Promptlayer
-import dotenv, os
-import requests
-
-from litellm.proxy._types import UserAPIKeyAuth
-from litellm.caching import DualCache
-
-from typing import Literal, Union
-
-dotenv.load_dotenv()  # Loading env variables using dotenv
+import os
 import traceback
+from typing import Any, Literal, Optional, Tuple, Union
+
+import dotenv
+from pydantic import BaseModel
+
+from litellm.caching import DualCache
+from litellm.proxy._types import UserAPIKeyAuth
+from litellm.types.llms.openai import ChatCompletionRequest
+from litellm.types.utils import ModelResponse
 
 
 class CustomLogger:  # https://docs.litellm.ai/docs/observability/custom_callback#callback-class
     # Class variables or attributes
-    def __init__(self):
+    def __init__(self) -> None:
         pass
 
     def log_pre_api_call(self, model, messages, kwargs):
@@ -46,6 +47,41 @@ class CustomLogger:  # https://docs.litellm.ai/docs/observability/custom_callbac
     async def async_log_failure_event(self, kwargs, response_obj, start_time, end_time):
         pass
 
+    #### PRE-CALL CHECKS - router/proxy only ####
+    """
+    Allows usage-based-routing-v2 to run pre-call rpm checks within the picked deployment's semaphore (concurrency-safe tpm/rpm checks).
+    """
+
+    async def async_pre_call_check(self, deployment: dict) -> Optional[dict]:
+        pass
+
+    def pre_call_check(self, deployment: dict) -> Optional[dict]:
+        pass
+
+    #### ADAPTERS #### Allow calling 100+ LLMs in custom format - https://github.com/BerriAI/litellm/pulls
+
+    def translate_completion_input_params(
+        self, kwargs
+    ) -> Optional[ChatCompletionRequest]:
+        """
+        Translates the input params, from the provider's native format to the litellm.completion() format.
+        """
+        pass
+
+    def translate_completion_output_params(
+        self, response: ModelResponse
+    ) -> Optional[BaseModel]:
+        """
+        Translates the output params, from the OpenAI format to the custom format.
+        """
+        pass
+
+    def translate_completion_output_params_streaming(self) -> Optional[BaseModel]:
+        """
+        Translates the streaming chunk, from the OpenAI format to the custom format.
+        """
+        pass
+
     #### CALL HOOKS - proxy only ####
     """
     Control the modify incoming / outgoung data before calling the model
@@ -56,8 +92,18 @@ class CustomLogger:  # https://docs.litellm.ai/docs/observability/custom_callbac
         user_api_key_dict: UserAPIKeyAuth,
         cache: DualCache,
         data: dict,
-        call_type: Literal["completion", "embeddings", "image_generation"],
-    ):
+        call_type: Literal[
+            "completion",
+            "text_completion",
+            "embeddings",
+            "image_generation",
+            "moderation",
+            "audio_transcription",
+            "pass_through_endpoint",
+        ],
+    ) -> Optional[
+        Union[Exception, str, dict]
+    ]:  # raise exception if invalid, return a str for the user to receive - if rejected, or return a modified dictionary for passing into litellm
         pass
 
     async def async_post_call_failure_hook(
@@ -71,6 +117,18 @@ class CustomLogger:  # https://docs.litellm.ai/docs/observability/custom_callbac
         response,
     ):
         pass
+
+    async def async_logging_hook(
+        self, kwargs: dict, result: Any, call_type: str
+    ) -> Tuple[dict, Any]:
+        """For masking logged request/response. Return a modified version of the request/result."""
+        return kwargs, result
+
+    def logging_hook(
+        self, kwargs: dict, result: Any, call_type: str
+    ) -> Tuple[dict, Any]:
+        """For masking logged request/response. Return a modified version of the request/result."""
+        return kwargs, result
 
     async def async_moderation_hook(
         self,
@@ -99,7 +157,6 @@ class CustomLogger:  # https://docs.litellm.ai/docs/observability/custom_callbac
             )
             print_verbose(f"Custom Logger - model call details: {kwargs}")
         except:
-            traceback.print_exc()
             print_verbose(f"Custom Logger Error - {traceback.format_exc()}")
 
     async def async_log_input_event(
@@ -114,7 +171,6 @@ class CustomLogger:  # https://docs.litellm.ai/docs/observability/custom_callbac
             )
             print_verbose(f"Custom Logger - model call details: {kwargs}")
         except:
-            traceback.print_exc()
             print_verbose(f"Custom Logger Error - {traceback.format_exc()}")
 
     def log_event(
@@ -130,7 +186,6 @@ class CustomLogger:  # https://docs.litellm.ai/docs/observability/custom_callbac
                 end_time,
             )
         except:
-            # traceback.print_exc()
             print_verbose(f"Custom Logger Error - {traceback.format_exc()}")
             pass
 
@@ -147,6 +202,5 @@ class CustomLogger:  # https://docs.litellm.ai/docs/observability/custom_callbac
                 end_time,
             )
         except:
-            # traceback.print_exc()
             print_verbose(f"Custom Logger Error - {traceback.format_exc()}")
             pass

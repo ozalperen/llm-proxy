@@ -24,6 +24,15 @@ $ litellm --model huggingface/bigcode/starcoder
 #INFO: Proxy running on http://0.0.0.0:4000
 ```
 
+
+:::info
+
+Run with `--detailed_debug` if you need detailed debug logs 
+
+```shell
+$ litellm --model huggingface/bigcode/starcoder --detailed_debug
+:::
+
 ### Test
 In a new shell, run, this will make an `openai.chat.completions` request. Ensure you're using openai v1.0.0+
 ```shell
@@ -348,6 +357,29 @@ query_result = embeddings.embed_query(text)
 
 print(f"TITAN EMBEDDINGS")
 print(query_result[:5])
+```
+</TabItem>
+<TabItem value="litellm" label="LiteLLM SDK">
+
+This is **not recommended**. There is duplicate logic as the proxy also uses the sdk, which might lead to unexpected errors. 
+
+```python
+from litellm import completion 
+
+response = completion(
+    model="openai/gpt-3.5-turbo", 
+    messages = [
+        {
+            "role": "user",
+            "content": "this is a test request, write a short poem"
+        }
+    ], 
+    api_key="anything", 
+    base_url="http://0.0.0.0:4000"
+    )
+
+print(response)
+
 ```
 </TabItem>
 </Tabs>

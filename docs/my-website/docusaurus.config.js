@@ -11,7 +11,7 @@ const config = {
   favicon: '/img/favicon.ico', 
 
   // Set the production url of your site here
-  url: 'https://litellm.vercel.app/',
+  url: 'https://docs.litellm.ai/',
   // Set the /<baseUrl>/ pathname under which your site is served
   // For GitHub pages deployment, it is often '/<projectName>/'
   baseUrl: '/',
@@ -38,9 +38,6 @@ const config = {
         disableInDev: false,
       },
     ],
-    [ require.resolve('docusaurus-lunr-search'), {
-      languages: ['en'] // language codes
-    }],
     () => ({
       name: 'cripchat',
       injectHtmlTags() {
@@ -90,6 +87,15 @@ const config = {
     ({
       // Replace with your project's social card
       image: 'img/docusaurus-social-card.png',
+      algolia: {
+        // The application ID provided by Algolia
+        appId: 'NU85Y4NU0B',
+  
+        // Public API key: it is safe to commit it
+        apiKey: '4e0cf8c3020d0c876ad9174cea5c01fb',
+  
+        indexName: 'litellm',
+      },
       navbar: {
         title: '🚅 LiteLLM',
         items: [
@@ -104,6 +110,12 @@ const config = {
             position: 'left',
             label: 'Enterprise',
             to: "docs/enterprise"
+          },
+          {
+            sidebarId: 'tutorialSidebar',
+            position: 'left',
+            label: '🚀 Hosted',
+            to: "docs/hosted"
           },
           {
             href: 'https://github.com/BerriAI/litellm',
@@ -132,8 +144,8 @@ const config = {
             title: 'Docs',
             items: [
               {
-                label: 'Tutorial',
-                to: '/docs/index',
+                label: 'Getting Started',
+                to: 'https://docs.litellm.ai/docs/',
               },
             ],
           },

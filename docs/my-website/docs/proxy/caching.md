@@ -61,6 +61,22 @@ litellm_settings:
     ttl: 600 # will be cached on redis for 600s
 ```
 
+
+## SSL
+
+just set `REDIS_SSL="True"` in your .env, and LiteLLM will pick this up. 
+
+```env
+REDIS_SSL="True"
+```
+
+For quick testing, you can also use REDIS_URL, eg.:
+
+```
+REDIS_URL="rediss://.."
+```
+
+but we **don't** recommend using REDIS_URL in prod. We've noticed a performance difference between using it vs. redis_host, port, etc. 
 #### Step 2: Add Redis Credentials to .env
 Set either `REDIS_URL` or the `REDIS_HOST` in your os environment, to enable caching.
 
@@ -267,7 +283,7 @@ litellm_settings:
 
 ### Turn on / off caching per request.  
 
-The proxy support 3 cache-controls:
+The proxy support 4 cache-controls:
 
 - `ttl`: *Optional(int)* - Will cache the response for the user-defined amount of time (in seconds).
 - `s-maxage`: *Optional(int)* Will only accept cached responses that are within user-defined range (in seconds).
@@ -277,6 +293,11 @@ The proxy support 3 cache-controls:
 [Let us know if you need more](https://github.com/BerriAI/litellm/issues/1218)
 
 **Turn off caching**
+
+Set `no-cache=True`, this will not return a cached response
+
+<Tabs>
+<TabItem value="openai" label="OpenAI Python SDK">
 
 ```python
 import os
@@ -303,8 +324,80 @@ chat_completion = client.chat.completions.create(
     }
 )
 ```
+</TabItem>
+
+<TabItem value="curl" label="curl">
+
+```shell
+curl http://localhost:4000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer sk-1234" \
+  -d '{
+    "model": "gpt-3.5-turbo",
+    "cache": {"no-cache": True},
+    "messages": [
+      {"role": "user", "content": "Say this is a test"}
+    ]
+  }'
+```
+
+</TabItem>
+
+</Tabs>
 
 **Turn on caching**
+
+By default cache is always on
+
+<Tabs>
+<TabItem value="openai" label="OpenAI Python SDK">
+
+```python
+import os
+from openai import OpenAI
+
+client = OpenAI(
+    # This is the default and can be omitted
+    api_key=os.environ.get("OPENAI_API_KEY"),
+		base_url="http://0.0.0.0:4000"
+)
+
+chat_completion = client.chat.completions.create(
+    messages=[
+        {
+            "role": "user",
+            "content": "Say this is a test",
+        }
+    ],
+    model="gpt-3.5-turbo"
+)
+```
+</TabItem>
+
+<TabItem value="curl on" label="curl">
+
+```shell
+curl http://localhost:4000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer sk-1234" \
+  -d '{
+    "model": "gpt-3.5-turbo",
+    "messages": [
+      {"role": "user", "content": "Say this is a test"}
+    ]
+  }'
+```
+
+</TabItem>
+
+</Tabs>
+
+**Set `ttl`**
+
+Set `ttl=600`, this will caches response for 10 minutes (600 seconds)
+
+<Tabs>
+<TabItem value="openai" label="OpenAI Python SDK">
 
 ```python
 import os
@@ -331,6 +424,35 @@ chat_completion = client.chat.completions.create(
     }
 )
 ```
+</TabItem>
+
+<TabItem value="curl on" label="curl">
+
+```shell
+curl http://localhost:4000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer sk-1234" \
+  -d '{
+    "model": "gpt-3.5-turbo",
+    "cache": {"ttl": 600},
+    "messages": [
+      {"role": "user", "content": "Say this is a test"}
+    ]
+  }'
+```
+
+</TabItem>
+
+</Tabs>
+
+
+
+**Set `s-maxage`**
+
+Set `s-maxage`, this will only get responses cached within last 10 minutes 
+
+<Tabs>
+<TabItem value="openai" label="OpenAI Python SDK">
 
 ```python
 import os
@@ -356,6 +478,54 @@ chat_completion = client.chat.completions.create(
       }
     }
 )
+```
+</TabItem>
+
+<TabItem value="curl on" label="curl">
+
+```shell
+curl http://localhost:4000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer sk-1234" \
+  -d '{
+    "model": "gpt-3.5-turbo",
+    "cache": {"s-maxage": 600},
+    "messages": [
+      {"role": "user", "content": "Say this is a test"}
+    ]
+  }'
+```
+
+</TabItem>
+
+</Tabs>
+
+
+### Turn on / off caching per Key.
+
+1. Add cache params when creating a key [full list](#turn-on--off-caching-per-key)
+
+```bash 
+curl -X POST 'http://0.0.0.0:4000/key/generate' \
+-H 'Authorization: Bearer sk-1234' \
+-H 'Content-Type: application/json' \
+-D '{
+    "user_id": "222",
+    "metadata": {
+        "cache": {
+            "no-cache": true
+        }
+    }
+}'
+```
+
+2. Test it! 
+
+```bash 
+curl -X POST 'http://localhost:4000/chat/completions' \
+-H 'Content-Type: application/json' \
+-H 'Authorization: Bearer <YOUR_NEW_KEY>' \
+-D '{"model": "gpt-3.5-turbo", "messages": [{"role": "user", "content": "bom dia"}]}'
 ```
 
 ### Deleting Cache Keys - `/cache/delete` 
@@ -471,3 +641,14 @@ cache_params:
   s3_aws_session_token: your_session_token  # AWS Session Token for temporary credentials
 
 ```
+
+## Advanced - user api key cache ttl 
+
+Configure how long the in-memory cache stores the key object (prevents db requests)
+
+```yaml
+general_settings:
+  user_api_key_cache_ttl: <your-number> #time in seconds
+```
+
+By default this value is set to 60s.

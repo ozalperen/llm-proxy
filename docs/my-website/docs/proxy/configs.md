@@ -62,9 +62,11 @@ model_list:
 
 litellm_settings: # module level litellm settings - https://github.com/BerriAI/litellm/blob/main/litellm/__init__.py
   drop_params: True
+  success_callback: ["langfuse"] # OPTIONAL - if you want to start sending LLM Logs to Langfuse. Make sure to set `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY` in your env
 
 general_settings: 
   master_key: sk-1234 # [OPTIONAL] Only use this if you to require all calls to contain this key (Authorization: Bearer sk-1234)
+  alerting: ["slack"] # [OPTIONAL] If you want Slack Alerts for Hanging LLM requests, Slow llm responses, Budget Alerts. Make sure to set `SLACK_WEBHOOK_URL` in your env
 ```
 :::info
 
@@ -78,6 +80,13 @@ For more provider-specific info, [go here](../providers/)
 $ litellm --config /path/to/config.yaml
 ```
 
+:::tip
+
+Run with `--detailed_debug` if you need detailed debug logs 
+
+```shell
+$ litellm --config /path/to/config.yaml --detailed_debug
+:::
 
 ### Using Proxy - Curl Request, OpenAI Package, Langchain, Langchain JS
 Calling a model group 
@@ -243,17 +252,90 @@ $ litellm --config /path/to/config.yaml
 ```
 
 
+## Multiple OpenAI Organizations 
+
+Add all openai models across all OpenAI organizations with just 1 model definition 
+
+```yaml
+  - model_name: *
+    litellm_params:
+      model: openai/*
+      api_key: os.environ/OPENAI_API_KEY
+      organization:
+       - org-1 
+       - org-2 
+       - org-3
+```
+
+LiteLLM will automatically create separate deployments for each org.
+
+Confirm this via 
+
+```bash
+curl --location 'http://0.0.0.0:4000/v1/model/info' \
+--header 'Authorization: Bearer ${LITELLM_KEY}' \
+--data ''
+```
+
+## Wildcard Model Name (Add ALL MODELS from env)
+
+Dynamically call any model from any given provider without the need to predefine it in the config YAML file. As long as the relevant keys are in the environment (see [providers list](../providers/)), LiteLLM will make the call correctly.
+
+
+
+1. Setup config.yaml
+```
+model_list:
+  - model_name: "*"             # all requests where model not in your config go to this deployment
+    litellm_params:
+      model: "openai/*"           # passes our validation check that a real provider is given
+```
+
+2. Start LiteLLM proxy 
+
+```
+litellm --config /path/to/config.yaml
+```
+
+3. Try claude 3-5 sonnet from anthropic 
+
+```bash
+curl -X POST 'http://0.0.0.0:4000/chat/completions' \
+-H 'Content-Type: application/json' \
+-H 'Authorization: Bearer sk-1234' \
+-D '{
+  "model": "claude-3-5-sonnet-20240620",
+  "messages": [
+        {"role": "user", "content": "Hey, how'\''s it going?"},
+        {
+            "role": "assistant",
+            "content": "I'\''m doing well. Would like to hear the rest of the story?"
+        },
+        {"role": "user", "content": "Na"},
+        {
+            "role": "assistant",
+            "content": "No problem, is there anything else i can help you with today?"
+        },
+        {
+            "role": "user",
+            "content": "I think you'\''re getting cut off sometimes"
+        }
+    ]
+}
+'
+```
+
 ## Load Balancing 
 
 :::info
-For more on this, go to [this page](./load_balancing.md)
+For more on this, go to [this page](https://docs.litellm.ai/docs/proxy/load_balancing)
 :::
 
-Use this to call multiple instances of the same model and configure things like [routing strategy](../routing.md#advanced). 
+Use this to call multiple instances of the same model and configure things like [routing strategy](https://docs.litellm.ai/docs/routing#advanced).
 
 For optimal performance:
 - Set `tpm/rpm` per model deployment. Weighted picks are then based on the established tpm/rpm.
-- Select your optimal routing strategy in `router_settings:routing_strategy`. 
+- Select your optimal routing strategy in `router_settings:routing_strategy`.
 
 LiteLLM supports
 ```python
@@ -393,7 +475,7 @@ model_list:
 
 ```shell
 $ litellm --config /path/to/config.yaml
-```
+``` 
 
 ## Setting Embedding Models 
 
@@ -557,6 +639,36 @@ curl --location 'http://0.0.0.0:4000/chat/completions' \
 }'
 ```
 
+## ✨ IP Address Filtering
+
+:::info
+
+You need a LiteLLM License to unlock this feature. [Grab time](https://calendly.com/d/4mp-gd3-k5k/litellm-1-1-onboarding-chat), to get one today!
+
+:::
+
+Restrict which IP's can call the proxy endpoints.
+
+```yaml
+general_settings:
+  allowed_ips: ["192.168.1.1"]
+```
+
+**Expected Response** (if IP not listed)
+
+```bash
+{
+    "error": {
+        "message": "Access forbidden: IP address not allowed.",
+        "type": "auth_error",
+        "param": "None",
+        "code": 403
+    }
+}
+```
+
+
+
 ## Disable Swagger UI 
 
 To disable the Swagger docs from the base url, set 
@@ -600,6 +712,7 @@ general_settings:
   "general_settings": {
     "completion_model": "string",
     "disable_spend_logs": "boolean", # turn off writing each transaction to the db
+    "disable_master_key_return": "boolean", # turn off returning master key on UI (checked on '/user/info' endpoint)
     "disable_reset_budget": "boolean", # turn off reset budget scheduled task
     "enable_jwt_auth": "boolean", # allow proxy admin to auth in via jwt tokens with 'litellm_proxy_admin' in claims
     "enforce_user_param": "boolean", # requires all openai endpoint requests to have a 'user' param

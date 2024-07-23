@@ -1,7 +1,7 @@
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
-# Use with Langchain, OpenAI SDK, LlamaIndex, Curl
+# Use with Langchain, OpenAI SDK, LlamaIndex, Instructor, Curl
 
 :::info
 
@@ -25,6 +25,39 @@ Set `extra_body={"metadata": { }}` to `metadata` you want to pass
 ```python
 import openai
 client = openai.OpenAI(
+    api_key="anything",
+    base_url="http://0.0.0.0:4000"
+)
+
+# request sent to model set on litellm proxy, `litellm --model`
+response = client.chat.completions.create(
+    model="gpt-3.5-turbo",
+    messages = [
+        {
+            "role": "user",
+            "content": "this is a test request, write a short poem"
+        }
+    ],
+    extra_body={ # pass in any provider-specific param, if not supported by openai, https://docs.litellm.ai/docs/completion/input#provider-specific-params
+        "metadata": { # 👈 use for logging additional params (e.g. to langfuse)
+            "generation_name": "ishaan-generation-openai-client",
+            "generation_id": "openai-client-gen-id22",
+            "trace_id": "openai-client-trace-id22",
+            "trace_user_id": "openai-client-user-id2"
+        }
+    }
+)
+
+print(response)
+```
+</TabItem>
+<TabItem value="azureopenai" label="AzureOpenAI Python">
+
+Set `extra_body={"metadata": { }}` to `metadata` you want to pass
+
+```python
+import openai
+client = openai.AzureOpenAI(
     api_key="anything",
     base_url="http://0.0.0.0:4000"
 )
@@ -121,6 +154,9 @@ from langchain.prompts.chat import (
     SystemMessagePromptTemplate,
 )
 from langchain.schema import HumanMessage, SystemMessage
+import os 
+
+os.environ["OPENAI_API_KEY"] = "anything"
 
 chat = ChatOpenAI(
     openai_api_base="http://0.0.0.0:4000",
@@ -149,6 +185,85 @@ response = chat(messages)
 print(response)
 ```
 
+</TabItem>
+<TabItem value="langchain js" label="Langchain JS">
+
+```js
+import { ChatOpenAI } from "@langchain/openai";
+
+
+const model = new ChatOpenAI({
+  modelName: "gpt-4",
+  openAIApiKey: "sk-1234",
+  modelKwargs: {"metadata": "hello world"} // 👈 PASS Additional params here
+}, {
+  basePath: "http://0.0.0.0:4000",
+});
+
+const message = await model.invoke("Hi there!");
+
+console.log(message);
+
+```
+
+</TabItem>
+<TabItem value="openai JS" label="OpenAI JS">
+
+```js
+const { OpenAI } = require('openai');
+
+const openai = new OpenAI({
+  apiKey: "sk-1234", // This is the default and can be omitted
+  baseURL: "http://0.0.0.0:4000"
+});
+
+async function main() {
+  const chatCompletion = await openai.chat.completions.create({
+    messages: [{ role: 'user', content: 'Say this is a test' }],
+    model: 'gpt-3.5-turbo',
+  }, {"metadata": {
+            "generation_name": "ishaan-generation-openaijs-client",
+            "generation_id": "openaijs-client-gen-id22",
+            "trace_id": "openaijs-client-trace-id22",
+            "trace_user_id": "openaijs-client-user-id2"
+        }});
+}
+
+main();
+
+```
+
+</TabItem>
+<TabItem value="instructor" label="Instructor">
+
+```python
+from openai import OpenAI
+import instructor
+from pydantic import BaseModel
+
+my_proxy_api_key = "" # e.g. sk-1234
+my_proxy_base_url = "" # e.g. http://0.0.0.0:4000
+
+# This enables response_model keyword
+# from client.chat.completions.create
+client = instructor.from_openai(OpenAI(api_key=my_proxy_api_key, base_url=my_proxy_base_url))
+
+class UserDetail(BaseModel):
+    name: str
+    age: int
+
+user = client.chat.completions.create(
+    model="gemini-pro-flash",
+    response_model=UserDetail,
+    messages=[
+        {"role": "user", "content": "Extract Jason is 25 years old"},
+    ]
+)
+
+assert isinstance(user, UserDetail)
+assert user.name == "Jason"
+assert user.age == 25
+```
 </TabItem>
 </Tabs>
 
@@ -180,6 +295,97 @@ print(response)
 }
 
 ```
+
+### Function Calling 
+
+Here's some examples of doing function calling with the proxy. 
+
+You can use the proxy for function calling with **any** openai-compatible project. 
+
+<Tabs>
+<TabItem value="curl" label="curl">
+
+```bash
+curl http://0.0.0.0:4000/v1/chat/completions \
+-H "Content-Type: application/json" \
+-H "Authorization: Bearer $OPTIONAL_YOUR_PROXY_KEY" \
+-d '{
+  "model": "gpt-4-turbo",
+  "messages": [
+    {
+      "role": "user",
+      "content": "What'\''s the weather like in Boston today?"
+    }
+  ],
+  "tools": [
+    {
+      "type": "function",
+      "function": {
+        "name": "get_current_weather",
+        "description": "Get the current weather in a given location",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "location": {
+              "type": "string",
+              "description": "The city and state, e.g. San Francisco, CA"
+            },
+            "unit": {
+              "type": "string",
+              "enum": ["celsius", "fahrenheit"]
+            }
+          },
+          "required": ["location"]
+        }
+      }
+    }
+  ],
+  "tool_choice": "auto"
+}'
+```
+</TabItem>
+<TabItem value="sdk" label="SDK">
+
+```python 
+from openai import OpenAI
+client = OpenAI(
+    api_key="sk-1234", # [OPTIONAL] set if you set one on proxy, else set ""
+    base_url="http://0.0.0.0:4000",
+)
+
+tools = [
+  {
+    "type": "function",
+    "function": {
+      "name": "get_current_weather",
+      "description": "Get the current weather in a given location",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "location": {
+            "type": "string",
+            "description": "The city and state, e.g. San Francisco, CA",
+          },
+          "unit": {"type": "string", "enum": ["celsius", "fahrenheit"]},
+        },
+        "required": ["location"],
+      },
+    }
+  }
+]
+messages = [{"role": "user", "content": "What's the weather like in Boston today?"}]
+completion = client.chat.completions.create(
+  model="gpt-4o", # use 'model_name' from config.yaml
+  messages=messages,
+  tools=tools,
+  tool_choice="auto"
+)
+
+print(completion)
+
+```
+</TabItem>
+</Tabs>
 
 ## `/embeddings`
 
@@ -361,6 +567,188 @@ curl --location 'http://0.0.0.0:4000/moderations' \
 
 
 ## Advanced
+
+### (BETA) Batch Completions - pass multiple models
+
+Use this when you want to send 1 request to N Models
+
+#### Expected Request Format
+
+Pass model as a string of comma separated value of models. Example `"model"="llama3,gpt-3.5-turbo"`
+
+This same request will be sent to the following model groups on the [litellm proxy config.yaml](https://docs.litellm.ai/docs/proxy/configs)
+- `model_name="llama3"`
+- `model_name="gpt-3.5-turbo"` 
+
+<Tabs>
+
+<TabItem value="openai-py" label="OpenAI Python SDK">
+
+
+```python
+import openai
+
+client = openai.OpenAI(api_key="sk-1234", base_url="http://0.0.0.0:4000")
+
+response = client.chat.completions.create(
+    model="gpt-3.5-turbo,llama3",
+    messages=[
+        {"role": "user", "content": "this is a test request, write a short poem"}
+    ],
+)
+
+print(response)
+```
+
+
+
+#### Expected Response Format
+
+Get a list of responses when `model` is passed as a list
+
+```python
+[
+    ChatCompletion(
+        id='chatcmpl-9NoYhS2G0fswot0b6QpoQgmRQMaIf',
+        choices=[
+            Choice(
+                finish_reason='stop',
+                index=0,
+                logprobs=None,
+                message=ChatCompletionMessage(
+                    content='In the depths of my soul, a spark ignites\nA light that shines so pure and bright\nIt dances and leaps, refusing to die\nA flame of hope that reaches the sky\n\nIt warms my heart and fills me with bliss\nA reminder that in darkness, there is light to kiss\nSo I hold onto this fire, this guiding light\nAnd let it lead me through the darkest night.',
+                    role='assistant',
+                    function_call=None,
+                    tool_calls=None
+                )
+            )
+        ],
+        created=1715462919,
+        model='gpt-3.5-turbo-0125',
+        object='chat.completion',
+        system_fingerprint=None,
+        usage=CompletionUsage(
+            completion_tokens=83,
+            prompt_tokens=17,
+            total_tokens=100
+        )
+    ),
+    ChatCompletion(
+        id='chatcmpl-4ac3e982-da4e-486d-bddb-ed1d5cb9c03c',
+        choices=[
+            Choice(
+                finish_reason='stop',
+                index=0,
+                logprobs=None,
+                message=ChatCompletionMessage(
+                    content="A test request, and I'm delighted!\nHere's a short poem, just for you:\n\nMoonbeams dance upon the sea,\nA path of light, for you to see.\nThe stars up high, a twinkling show,\nA night of wonder, for all to know.\n\nThe world is quiet, save the night,\nA peaceful hush, a gentle light.\nThe world is full, of beauty rare,\nA treasure trove, beyond compare.\n\nI hope you enjoyed this little test,\nA poem born, of whimsy and jest.\nLet me know, if there's anything else!",
+                    role='assistant',
+                    function_call=None,
+                    tool_calls=None
+                )
+            )
+        ],
+        created=1715462919,
+        model='groq/llama3-8b-8192',
+        object='chat.completion',
+        system_fingerprint='fp_a2c8d063cb',
+        usage=CompletionUsage(
+            completion_tokens=120,
+            prompt_tokens=20,
+            total_tokens=140
+        )
+    )
+]
+```
+
+
+</TabItem>
+
+<TabItem value="curl" label="Curl">
+
+
+
+
+```shell
+curl --location 'http://localhost:4000/chat/completions' \
+    --header 'Authorization: Bearer sk-1234' \
+    --header 'Content-Type: application/json' \
+    --data '{
+    "model": "llama3,gpt-3.5-turbo",
+    "max_tokens": 10,
+    "user": "litellm2",
+    "messages": [
+        {
+        "role": "user",
+        "content": "is litellm getting better"
+        }
+    ]
+}'
+```
+
+
+
+
+#### Expected Response Format
+
+Get a list of responses when `model` is passed as a list
+
+```json
+[
+  {
+    "id": "chatcmpl-3dbd5dd8-7c82-4ca3-bf1f-7c26f497cf2b",
+    "choices": [
+      {
+        "finish_reason": "length",
+        "index": 0,
+        "message": {
+          "content": "The Elder Scrolls IV: Oblivion!\n\nReleased",
+          "role": "assistant"
+        }
+      }
+    ],
+    "created": 1715459876,
+    "model": "groq/llama3-8b-8192",
+    "object": "chat.completion",
+    "system_fingerprint": "fp_179b0f92c9",
+    "usage": {
+      "completion_tokens": 10,
+      "prompt_tokens": 12,
+      "total_tokens": 22
+    }
+  },
+  {
+    "id": "chatcmpl-9NnldUfFLmVquFHSX4yAtjCw8PGei",
+    "choices": [
+      {
+        "finish_reason": "length",
+        "index": 0,
+        "message": {
+          "content": "TES4 could refer to The Elder Scrolls IV:",
+          "role": "assistant"
+        }
+      }
+    ],
+    "created": 1715459877,
+    "model": "gpt-3.5-turbo-0125",
+    "object": "chat.completion",
+    "system_fingerprint": null,
+    "usage": {
+      "completion_tokens": 10,
+      "prompt_tokens": 9,
+      "total_tokens": 19
+    }
+  }
+]
+```
+
+
+</TabItem>
+</Tabs>
+
+
+
+
 
 ### Pass User LLM API Keys, Fallbacks
 Allow your end-users to pass their model list, api base, OpenAI API key (any LiteLLM supported provider) to make requests 

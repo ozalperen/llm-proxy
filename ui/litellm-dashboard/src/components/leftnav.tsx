@@ -1,7 +1,7 @@
 import { Layout, Menu } from "antd";
 import Link from "next/link";
 import { List } from "postcss/lib/list";
-import { Text } from "@tremor/react"
+import { Text } from "@tremor/react";
 
 const { Sider } = Layout;
 
@@ -28,17 +28,11 @@ const Sidebar: React.FC<SidebarProps> = ({
             }
             style={{ height: "100%", borderRight: 0 }}
           >
-            <Menu.Item key="4" onClick={() => setPage("api-keys")}>
-              API Keys
-            </Menu.Item>
-            <Menu.Item key="2" onClick={() => setPage("models")}>
-              Models
-            </Menu.Item>
-            <Menu.Item key="3" onClick={() => setPage("llm-playground")}>
-              Chat UI
-            </Menu.Item>
             <Menu.Item key="1" onClick={() => setPage("usage")}>
               Usage
+            </Menu.Item>
+            <Menu.Item key="9" onClick={() => setPage("caching")}>
+              <Text>Caching</Text>
             </Menu.Item>
           </Menu>
         </Sider>
@@ -46,59 +40,76 @@ const Sidebar: React.FC<SidebarProps> = ({
     );
   }
   return (
-    <Layout style={{ minHeight: "100vh", maxWidth: "120px" }}>
-      <Sider width={120}>
+    <Layout style={{ minHeight: "100vh", maxWidth: "145px" }}>
+      <Sider width={145}>
         <Menu
           mode="inline"
           defaultSelectedKeys={defaultSelectedKey ? defaultSelectedKey : ["1"]}
           style={{ height: "100%", borderRight: 0 }}
         >
           <Menu.Item key="1" onClick={() => setPage("api-keys")}>
-            <Text>
-            API Keys
-            </Text>
+            <Text>Virtual Keys</Text>
           </Menu.Item>
           <Menu.Item key="3" onClick={() => setPage("llm-playground")}>
-          <Text>
-            Test Key
-            </Text>
+            <Text>Test Key</Text>
           </Menu.Item>
-          <Menu.Item key="2" onClick={() => setPage("models")}>
-          <Text>
-            Models
-            </Text>
-          </Menu.Item>
+
+          {userRole == "Admin" ? (
+            <Menu.Item key="2" onClick={() => setPage("models")}>
+              <Text>Models</Text>
+            </Menu.Item>
+          ) : null}
+          {userRole == "Admin" ? (
+            <Menu.Item key="4" onClick={() => setPage("usage")}>
+              <Text>Usage</Text>
+            </Menu.Item>
+          ) : null}
+
           {userRole == "Admin" ? (
             <Menu.Item key="6" onClick={() => setPage("teams")}>
-              <Text>
-              Teams
-              </Text>
+              <Text>Teams</Text>
             </Menu.Item>
           ) : null}
-          <Menu.Item key="4" onClick={() => setPage("usage")}>
-          <Text>
-            Usage
-            </Text>
-          </Menu.Item>
-            {userRole == "Admin" ? (
-            <Menu.Item key="5" onClick={() => setPage("users")}>
-              <Text>
-              Users
-              </Text>
-            </Menu.Item>
-          ) : null}
-          <Menu.Item key="8" onClick={() => setPage("settings")}>
-          <Text>
-            Integrations
-          </Text>
-          </Menu.Item>
+
           {userRole == "Admin" ? (
-            <Menu.Item key="7" onClick={() => setPage("admin-panel")}>
-              <Text>
-              Admin
-              </Text>
+            <Menu.Item key="5" onClick={() => setPage("users")}>
+              <Text>Internal Users</Text>
             </Menu.Item>
           ) : null}
+
+          {userRole == "Admin" ? (
+            <Menu.Item key="8" onClick={() => setPage("settings")}>
+              <Text>Logging & Alerts</Text>
+            </Menu.Item>
+          ) : null}
+          {userRole == "Admin" ? (
+            <Menu.Item key="9" onClick={() => setPage("caching")}>
+              <Text>Caching</Text>
+            </Menu.Item>
+          ) : null}
+
+          {userRole == "Admin" ? (
+            <Menu.Item key="10" onClick={() => setPage("budgets")}>
+              <Text>Budgets</Text>
+            </Menu.Item>
+          ) : null}
+          
+          {userRole == "Admin" ? (
+            <Menu.Item key="11" onClick={() => setPage("general-settings")}>
+              <Text>Router Settings</Text>
+            </Menu.Item>
+          ) : null}
+          {userRole == "Admin" ? (
+            <Menu.Item key="12" onClick={() => setPage("admin-panel")}>
+              <Text>Admin Settings</Text>
+            </Menu.Item>
+          ) : null}
+          <Menu.Item key="13" onClick={() => setPage("api_ref")}>
+            <Text>API Reference</Text>
+          </Menu.Item>
+          <Menu.Item key="15" onClick={() => setPage("model-hub")}>
+            <Text>Model Hub</Text>
+          </Menu.Item>
         </Menu>
       </Sider>
     </Layout>

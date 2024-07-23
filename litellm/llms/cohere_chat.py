@@ -1,13 +1,19 @@
-import os, types
 import json
+import os
+import time
+import traceback
+import types
 from enum import Enum
-import requests
-import time, traceback
 from typing import Callable, Optional
-from litellm.utils import ModelResponse, Choices, Message, Usage
+
+import httpx  # type: ignore
+import requests  # type: ignore
+
 import litellm
-import httpx
-from .prompt_templates.factory import cohere_message_pt
+from litellm.types.llms.cohere import ToolResultObject
+from litellm.utils import Choices, Message, ModelResponse, Usage
+
+from .prompt_templates.factory import cohere_message_pt, cohere_messages_pt_v2
 
 
 class CohereError(Exception):
@@ -43,6 +49,7 @@ class CohereChatConfig:
         presence_penalty (float, optional): Used to reduce repetitiveness of generated tokens.
         tools (List[Dict[str, str]], optional): A list of available tools (functions) that the model may suggest invoking.
         tool_results (List[Dict[str, Any]], optional): A list of results from invoking tools.
+        seed (int, optional): A seed to assist reproducibility of the model's response.
     """
 
     preamble: Optional[str] = None
@@ -62,6 +69,7 @@ class CohereChatConfig:
     presence_penalty: Optional[int] = None
     tools: Optional[list] = None
     tool_results: Optional[list] = None
+    seed: Optional[int] = None
 
     def __init__(
         self,
@@ -82,6 +90,7 @@ class CohereChatConfig:
         presence_penalty: Optional[int] = None,
         tools: Optional[list] = None,
         tool_results: Optional[list] = None,
+        seed: Optional[int] = None,
     ) -> None:
         locals_ = locals()
         for key, value in locals_.items():
@@ -109,6 +118,7 @@ class CohereChatConfig:
 
 def validate_environment(api_key):
     headers = {
+        "Request-Source": "unspecified:litellm",
         "accept": "application/json",
         "content-type": "application/json",
     }
@@ -192,17 +202,19 @@ def completion(
     api_base: str,
     model_response: ModelResponse,
     print_verbose: Callable,
+    optional_params: dict,
     encoding,
     api_key,
     logging_obj,
-    optional_params=None,
     litellm_params=None,
     logger_fn=None,
 ):
     headers = validate_environment(api_key)
     completion_url = api_base
     model = model
-    prompt, tool_results = cohere_message_pt(messages=messages)
+    most_recent_message, chat_history = cohere_messages_pt_v2(
+        messages=messages, model=model, llm_provider="cohere_chat"
+    )
 
     ## Load Config
     config = litellm.CohereConfig.get_config()
@@ -217,18 +229,18 @@ def completion(
         _is_function_call = True
         cohere_tools = construct_cohere_tool(tools=optional_params["tools"])
         optional_params["tools"] = cohere_tools
-    if len(tool_results) > 0:
-        optional_params["tool_results"] = tool_results
-
+    if isinstance(most_recent_message, dict):
+        optional_params["tool_results"] = [most_recent_message]
+    elif isinstance(most_recent_message, str):
+        optional_params["message"] = most_recent_message
     data = {
         "model": model,
-        "message": prompt,
         **optional_params,
     }
 
     ## LOGGING
     logging_obj.pre_call(
-        input=prompt,
+        input=most_recent_message,
         api_key=api_key,
         additional_args={
             "complete_input_dict": data,
@@ -252,7 +264,7 @@ def completion(
     else:
         ## LOGGING
         logging_obj.post_call(
-            input=prompt,
+            input=most_recent_message,
             api_key=api_key,
             original_response=response.text,
             additional_args={"complete_input_dict": data},
@@ -295,12 +307,12 @@ def completion(
         prompt_tokens = billed_units.get("input_tokens", 0)
         completion_tokens = billed_units.get("output_tokens", 0)
 
-        model_response["created"] = int(time.time())
-        model_response["model"] = model
+        model_response.created = int(time.time())
+        model_response.model = model
         usage = Usage(
             prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens,
             total_tokens=prompt_tokens + completion_tokens,
         )
-        model_response.usage = usage
+        setattr(model_response, "usage", usage)
         return model_response
