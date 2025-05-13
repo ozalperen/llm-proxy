@@ -2,10 +2,10 @@ version: "3.11"
 services:
   litellm:
     container_name: ${LITELLM_CONTAINER_NAME}
-    build:
-      context: .
-      args:
-        target: runtime
+    # build:
+    #   context: .
+    #   args:
+    #     target: runtime
     image: ghcr.io/berriai/litellm-database:main-latest
     ports:
       - "${LITELLM_PORT}:4000" # Map the container port to the host, change the host port if necessary
@@ -38,8 +38,6 @@ services:
     image: redis:latest
     volumes:
       - ./containerMounts/litellm-redis-data:/data
-    command: redis-server --requirepass "${REDIS_PASSWORD}"
-
 
 networks:
   default:
